@@ -1,0 +1,5 @@
+project: staticvec
+target: staticvec
+
+cmds:
+  - cmd: /ops
