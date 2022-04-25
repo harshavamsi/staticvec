@@ -7,7 +7,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  MAYHEMFILE: Mayhemfile
+  OPS: ops.mayhemfile
 
 jobs:
   build:
@@ -46,11 +46,11 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Start analysis
+      - name: Start ops analysis
         uses: ForAllSecure/mcode-action@v1
         with:
           mayhem-token: ${{ secrets.MAYHEM_TOKEN }}
-          args: --image ${{ steps.meta.outputs.tags }} --file ${{ env.MAYHEMFILE }}
+          args: --image ${{ steps.meta.outputs.tags }} --file ${{ env.OPS }}
           sarif-output: sarif
 
       - name: Upload SARIF file(s)
