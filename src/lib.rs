@@ -33,10 +33,12 @@
   const_assume,
   const_eval_select,
   const_fn_floating_point_arithmetic,
-  const_intrinsic_copy,
+  const_maybe_uninit_array_assume_init,
   const_maybe_uninit_as_mut_ptr,
   const_maybe_uninit_assume_init,
   const_maybe_uninit_assume_init_read,
+  const_maybe_uninit_uninit_array,
+  const_maybe_uninit_zeroed,
   const_mut_refs,
   const_precise_live_drops,
   const_ptr_is_null,
@@ -54,6 +56,7 @@
   exact_size_is_empty,
   generic_const_exprs,
   inline_const,
+  maybe_uninit_array_assume_init,
   maybe_uninit_uninit_array,
   pattern,
   slice_partition_dedup,
@@ -2673,28 +2676,8 @@ impl<const N: usize> StaticVec<u8, N> {
   #[doc(hidden)]
   #[inline]
   pub(crate) const fn bytes_to_data(values: &[u8]) -> MaybeUninit<[u8; N]> {
-    // What follows is an idea partially arrived at from reading the source of the `const-concat`
-    // crate. Note that it amounts to effectively a `const fn` compatible implementation of what
-    // `MaybeUninit::assume_uninit()` does, and is *only* used here due to there being no other way
-    // to get an instance of `[MaybeUninit<u8>; N]` that we can actually write to (and to be clear,
-    // *not* read from) using regular indexing in conjunction with the `const_loop` feature (which
-    // is itself the only way at this time to write an arbitrary number of bytes from `values` to
-    // the result array at compile time).
-    #[repr(C)]
-    union Convert<From: Copy, To: Copy> {
-      from: From,
-      to: To,
-    }
-    // As stated above, this is effectively doing what `MaybeUninit::assume_init()` does.
-    // Note that while it might "look scary", what this function actually does would be incredibly
-    // mundane in basically any other language: you would just declare a very normal static array,
-    // and use it, very normally. That's literally *all* this is.
-    let mut res = unsafe {
-      Convert::<MaybeUninit<[MaybeUninit<u8>; N]>, [MaybeUninit<u8>; N]> {
-        from: MaybeUninit::uninit(),
-      }
-      .to
-    };
+    // Get an uninitialized array of bytes, with `N` capacity.
+    let mut res = MaybeUninit::uninit_array::<N>();
     // Move `values.len()` worth of bytes from `values` to `res`. I'm unaware of any other way that
     // this could be done currently that would leave us with something usable to create a StaticVec
     // for which the generic `N` could be *different* from `values.len()`, so thank
@@ -2707,9 +2690,15 @@ impl<const N: usize> StaticVec<u8, N> {
       res[i] = MaybeUninit::new(values[i]);
       i += 1;
     }
+    // Fill in any remaining "gaps", or do nothing if `values.len()` is the same as `N`.
+    let mut i = values.len();
+    while i < N {
+      res[i] = MaybeUninit::zeroed();
+      i += 1;
+    }
     // Convert `res` from an instance of `[MaybeUninit<u8>; N]` to one of `[u8; N]`, and then return
     // it as an instance of `MaybeUninit<[u8; N]>` that can be used to construct a `StaticVec`.
-    MaybeUninit::new(unsafe { Convert::<[MaybeUninit<u8>; N], [u8; N]> { from: res }.to })
+    MaybeUninit::new(unsafe { MaybeUninit::array_assume_init(res) })
   }
 
   /// Called solely from inside the `staticstring!` macro, and so must be public. This is guaranteed
